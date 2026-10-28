@@ -3,162 +3,289 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Backtest Dashboard · Event-Driven Backtester</title>
-<meta name="description" content="Interactive dashboard: pick a strategy, parameters, costs and date range, and the event-driven backtest re-runs live in your browser on SPY, TLT and GLD data.">
+<title>Backtest Lab · Event-Driven Backtester</title>
+<meta name="description" content="Interactive backtest dashboard: pick a strategy, parameters, costs and date range, and the event-driven engine re-runs live in your browser on SPY, TLT and GLD data.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root{
-  --bg:#fafaf8; --surface:#ffffff; --text:#1c1f24; --muted:#5d6672; --line:#e3e5e8; --grid:#ececea;
-  --accent:#2a6df4; --warn:#c2410c; --good:#0b7a5a; --code-bg:#f2f3f1;
-  --c-strat:#2a6df4; --c-bench:#7d8590; --c-expo:#0ca678;
+  --sans:"Fira Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  --mono:"Fira Code",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  /* light */
+  --bg:#f4f6f9; --card:#ffffff; --card-2:#f8f9fb; --text:#0e1726; --muted:#586274; --faint:#6f7a8c;
+  --line:#e3e7ee; --grid:#eceff4; --hover:#eef2f8;
+  --strat:#1f5eff; --bench:#7b8698; --pos:#0b8a52; --neg:#c93c27; --warn:#b45309; --expo:#0e9f8e; --cost:#b45309; --violet:#7c4dff;
+  --shadow:0 1px 2px rgba(14,23,38,.05),0 4px 16px rgba(14,23,38,.04);
+  color-scheme:light;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#111418; --surface:#181c21; --text:#e7e9ec; --muted:#9aa4b0; --line:#2a3037; --grid:#242a31;
-    --accent:#6ea0ff; --warn:#ff9a62; --good:#45d6a6; --code-bg:#1d2228;
-    --c-strat:#6ea0ff; --c-bench:#9aa4b0; --c-expo:#45d6a6;
+    --bg:#070a12; --card:#0d121c; --card-2:#111826; --text:#e9eef7; --muted:#93a0b4; --faint:#7d899c;
+    --line:#1c2535; --grid:#161e2c; --hover:#141c2b;
+    --strat:#5b9bff; --bench:#8b97ab; --pos:#34d37f; --neg:#ff6b5b; --warn:#f0a050; --expo:#2dd4bf; --cost:#f0a050; --violet:#a98bff;
+    --shadow:0 1px 0 rgba(255,255,255,.02) inset,0 8px 24px rgba(0,0,0,.35);
+    color-scheme:dark;
   }
 }
+:root[data-theme="dark"]{
+  --bg:#070a12; --card:#0d121c; --card-2:#111826; --text:#e9eef7; --muted:#93a0b4; --faint:#7d899c;
+  --line:#1c2535; --grid:#161e2c; --hover:#141c2b;
+  --strat:#5b9bff; --bench:#8b97ab; --pos:#34d37f; --neg:#ff6b5b; --warn:#f0a050; --expo:#2dd4bf; --cost:#f0a050; --violet:#a98bff;
+  --shadow:0 1px 0 rgba(255,255,255,.02) inset,0 8px 24px rgba(0,0,0,.35);
+  color-scheme:dark;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
-a{color:var(--accent)}
-.topbar{border-bottom:1px solid var(--line);background:var(--surface)}
-.topbar .in{max-width:1240px;margin:0 auto;padding:12px 20px;display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
-.topbar b{font-size:16px;letter-spacing:-.01em}
-.topbar nav a{margin-left:16px;font-size:14px;text-decoration:none;font-weight:600}
-.layout{max-width:1240px;margin:0 auto;padding:20px;display:grid;grid-template-columns:300px minmax(0,1fr);gap:20px;align-items:start}
-@media(max-width:900px){.layout{grid-template-columns:1fr}}
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
-.controls{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
-@media(max-width:900px){.controls{position:static;max-height:none}}
-.controls h3{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:18px 0 8px}
-.controls h3:first-child{margin-top:0}
-label.f{display:block;font-size:13px;margin:8px 0 2px;color:var(--muted)}
-select,input[type=number],input[type=date]{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--text);font:inherit}
-input[type=range]{width:100%;accent-color:var(--accent);margin:0}
-.slider .top{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
-.slider .top output{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--strat)}
+:focus-visible{outline:2px solid var(--strat);outline-offset:2px;border-radius:4px}
+output,.kpi b,td,.state b,pre,.chip,.vs{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* ---------- top bar ---------- */
+.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--card) 88%,transparent);backdrop-filter:saturate(1.4) blur(10px);border-bottom:1px solid var(--line)}
+.top .in{max-width:1480px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand svg{flex:none}
+.brand b{display:block;font-size:15px;letter-spacing:-.01em;line-height:1.2}
+.brand span{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top nav{display:flex;align-items:center;gap:6px}
+.top nav a,.icon-btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:8px;color:var(--text);text-decoration:none;font-weight:500;font-size:13px;border:1px solid transparent;background:none;cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s}
+.top nav a:hover,.icon-btn:hover{background:var(--hover);border-color:var(--line)}
+.icon-btn{width:36px;padding:0;justify-content:center}
+.sun{display:none}
+:root[data-theme="dark"] .sun{display:block}:root[data-theme="dark"] .moon{display:none}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .sun{display:block}:root:not([data-theme="light"]) .moon{display:none}}
+@media(max-width:560px){.brand span{display:none}}
+
+/* ---------- layout ---------- */
+.shell{max-width:1480px;margin:0 auto;padding:20px;display:grid;grid-template-columns:292px minmax(0,1fr);gap:20px;align-items:start}
+@media(max-width:960px){.shell{grid-template-columns:minmax(0,1fr);padding:14px}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);min-width:0}
+.side{position:sticky;top:68px;max-height:calc(100vh - 84px);overflow:auto;padding:6px 16px 16px}
+@media(max-width:960px){.side{position:static;max-height:none}}
+.side details{border-bottom:1px solid var(--line);padding:10px 0}
+.side summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:4px 0;min-height:28px}
+.side summary::-webkit-details-marker{display:none}
+.side summary::after{content:"";width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .15s;margin-right:3px}
+.side details[open] summary::after{transform:rotate(-135deg)}
+label.f{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+select,input[type=number],input[type=date]{width:100%;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--card-2);color:var(--text);font:inherit;font-size:13px;transition:border-color .15s}
+select:hover,input:hover{border-color:color-mix(in srgb,var(--strat) 45%,var(--line))}
+input[type=range]{width:100%;accent-color:var(--strat);margin:2px 0 0;height:22px}
+.slider .top2{display:flex;justify-content:space-between;align-items:baseline;margin-top:10px}
+.slider .top2 label{font-size:12px;color:var(--muted)}
+.slider output{font-size:13px;font-weight:600}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.checks label{display:inline-flex;align-items:center;gap:6px;margin:4px 12px 4px 0;font-size:14px}
+.checks{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.checks label{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 11px;border:1px solid var(--line);border-radius:8px;background:var(--card-2);font-size:13px;font-weight:500;cursor:pointer;transition:border-color .15s,background .15s}
+.checks label:has(input:checked){border-color:var(--strat);background:color-mix(in srgb,var(--strat) 12%,transparent)}
+.checks input{accent-color:var(--strat);margin:0}
 .presets{display:flex;flex-wrap:wrap;gap:6px}
-button{font:inherit;font-size:13px;font-weight:600;padding:6px 10px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--text);cursor:pointer}
-button:hover{border-color:var(--accent)}
-button.ghost{background:none}
-.skip{display:none;font-size:13px;font-weight:600;margin-bottom:10px}
-@media(max-width:900px){.skip{display:inline-block}}
-.hint{font-size:12px;color:var(--muted);margin:6px 0 0}
-.err{color:var(--warn);font-size:13px;margin-top:8px;min-height:1em}
-.main{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0}
-#out{min-width:0}
-.panel{min-width:0}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
-.kpi span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.kpi b{display:block;font-size:24px;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
-.kpi small{color:var(--muted);font-size:12px}
-.pos{color:var(--good)} .neg{color:var(--warn)}
-.ph{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
-.ph strong{font-size:15px}
-.legend{display:flex;gap:14px;font-size:13px;color:var(--muted)}
-.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
-.cbox{position:relative;height:340px}.cbox.s{height:170px}
-.toggle{font-size:13px;color:var(--muted)}.toggle input{margin-right:5px}
-table{border-collapse:collapse;width:100%;font-size:13px}
-th,td{padding:6px 9px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+.btn{height:32px;padding:0 11px;border-radius:8px;border:1px solid var(--line);background:var(--card-2);color:var(--text);font:inherit;font-size:12.5px;font-weight:500;cursor:pointer;transition:border-color .15s,background .15s}
+.btn:hover{border-color:var(--strat);background:color-mix(in srgb,var(--strat) 8%,var(--card-2))}
+.btn.ghost{background:none}
+.hint{font-size:12px;color:var(--faint);margin:8px 0 0;line-height:1.45}
+.err{color:var(--neg);font-size:12.5px;margin-top:8px;min-height:1em}
+.actions{display:flex;gap:8px;margin-top:14px}
+
+/* ---------- main ---------- */
+.main{display:grid;gap:16px;min-width:0;grid-template-columns:minmax(0,1fr)}
+#out{display:grid;gap:16px;min-width:0}
+#out[hidden]{display:none}
+.head h1{font-size:22px;letter-spacing:-.02em;margin:0;line-height:1.25}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{display:inline-flex;align-items:center;height:24px;padding:0 9px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:11.5px;color:var(--muted)}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+@media(max-width:1280px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:560px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{padding:14px 16px}
+.kpi span.l{display:block;font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.kpi b{display:block;font-size:23px;font-weight:600;letter-spacing:-.02em;margin:6px 0 8px;line-height:1.1}
+.kpi small{display:block;font-size:12px;color:var(--faint);min-height:1.4em;margin-top:6px}
+.vs{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:6px;font-size:11px;font-weight:500;background:var(--hover);color:var(--muted)}
+.vs.up{color:var(--pos);background:color-mix(in srgb,var(--pos) 13%,transparent)}
+.vs.down{color:var(--neg);background:color-mix(in srgb,var(--neg) 13%,transparent)}
+.vs.up::before,.vs.down::before{content:"";border:4px solid transparent}
+.vs.up::before{border-bottom:6px solid currentColor;border-top:0}
+.vs.down::before{border-top:6px solid currentColor;border-bottom:0}
+.pos{color:var(--pos)}.neg{color:var(--neg)}
+
+.panel{padding:16px 16px 12px}
+.ph{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.ph h2{font-size:14px;font-weight:600;margin:0;letter-spacing:-.005em}
+.ph p{margin:2px 0 0;font-size:12px;color:var(--faint)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);align-items:center}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw-line{width:18px;height:0;border-top:2.5px solid}
+.sw-dash{width:18px;height:0;border-top:2.5px dashed}
+.sw-box{width:11px;height:11px;border-radius:3px}
+.sw-tri{width:0;height:0;border:5px solid transparent}
+.sw-tri.up{border-bottom:8px solid var(--pos);border-top:0}
+.sw-tri.dn{border-top:8px solid var(--neg);border-bottom:0}
+.toggle{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
+.toggle input{accent-color:var(--strat);margin:0}
+.cbox{position:relative;height:200px}
+.cbox.xl{height:400px}.cbox.m{height:250px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media(max-width:1100px){.grid2{grid-template-columns:minmax(0,1fr)}}
+
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
 th:first-child,td:first-child{text-align:left}
-th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--surface)}
-.scroll{overflow:auto;max-height:360px}
+td:first-child{font-family:var(--sans);color:var(--muted)}
+th{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);font-weight:600;position:sticky;top:0;background:var(--card);z-index:1}
+tbody tr:hover td{background:var(--hover)}
+.scroll{overflow:auto;max-height:340px}
+.tear td:first-child{width:38%}
 .heat{overflow-x:auto}
-.heat table td{text-align:center;padding:5px 4px;min-width:44px;border:1px solid var(--surface);font-variant-numeric:tabular-nums}
+.heat table td{text-align:center;padding:6px 4px;min-width:46px;border:2px solid var(--card);color:var(--text);font-size:11.5px}
+.heat table td:first-child,.heat table th:first-child{text-align:left;color:var(--muted)}
 .heat table th{text-align:center}
-pre{margin:0;font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--code-bg);border:1px solid var(--line);border-radius:9px;padding:12px 14px;overflow-x:auto;min-height:7.5em}
-.ev-MARKET{color:var(--muted)}.ev-BAR_CLOSE{color:var(--accent)}.ev-SIGNAL{color:var(--warn)}.ev-ORDER{color:#a259d9}.ev-FILL{color:var(--good);font-weight:600}
-.insp{display:grid;gap:10px}
+
+pre{margin:0;font-size:12.5px;line-height:1.65;background:var(--card-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto;min-height:7.8em}
+.ev-MARKET{color:var(--faint)}.ev-BAR_CLOSE{color:var(--strat)}.ev-SIGNAL{color:var(--warn)}.ev-ORDER{color:var(--violet)}.ev-FILL{color:var(--pos);font-weight:600}
+.insp{display:grid;gap:12px}
 .insp .bar{display:flex;gap:8px;align-items:center}
 .insp input[type=range]{flex:1}
-.state{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
-.state b{color:var(--text);font-variant-numeric:tabular-nums}
-.summary{font-size:14px;color:var(--muted);margin:0}
-.loading{padding:60px;text-align:center;color:var(--muted)}
+.state{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12px;color:var(--muted)}
+.state b{color:var(--text);font-weight:500}
+.loading{padding:80px 20px;text-align:center;color:var(--muted)}
+.foot{font-size:12px;color:var(--faint);margin:0 0 24px}
+.skip{display:none;font-size:13px;font-weight:600;padding:10px 0 4px}
+@media(max-width:960px){.skip{display:inline-block}}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
-<div class="topbar"><div class="in">
-  <b>Backtest Dashboard</b>
-  <nav><a href="../">Report</a><a href="https://github.com/jainamh029/event-driven-backtester">GitHub</a></nav>
-</div></div>
+<header class="top"><div class="in">
+  <div class="brand">
+    <svg width="34" height="34" viewBox="0 0 34 34" role="img" aria-label="Backtest Lab logo"><rect width="34" height="34" rx="9" fill="var(--strat)"/><path d="M7 23l6-7 5 4 9-10" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="27" cy="10" r="2.2" fill="#fff"/></svg>
+    <div><b>Backtest Lab</b><span>Event-driven engine, running live in your browser</span></div>
+  </div>
+  <nav aria-label="Site">
+    <a href="../">Report</a>
+    <a href="https://github.com/jainamh029/event-driven-backtester">GitHub</a>
+    <button class="icon-btn" id="theme" aria-label="Toggle light and dark theme" title="Toggle theme">
+      <svg class="moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <svg class="sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </button>
+  </nav>
+</div></header>
 
-<div class="layout">
-  <aside class="panel controls" id="controls" aria-label="Backtest controls">
+<div class="shell">
+  <aside class="card side" id="controls" aria-label="Backtest controls">
     <a class="skip" href="#kpis">Skip to results ↓</a>
-    <h3>Presets</h3>
-    <div class="presets" id="presets"></div>
-
-    <h3>Strategy</h3>
-    <select id="strategy" aria-label="Strategy"></select>
-    <div id="params"></div>
-    <div class="err" id="err" role="alert"></div>
-
-    <h3>Universe</h3>
-    <div id="universe"></div>
-    <label class="f" for="bench">Benchmark (buy &amp; hold)</label>
-    <select id="bench"></select>
-
-    <h3>Window</h3>
-    <div class="two">
-      <div><label class="f" for="start">Start</label><input type="date" id="start"></div>
-      <div><label class="f" for="end">End</label><input type="date" id="end"></div>
-    </div>
-    <p class="hint">Indicators warm up inside the window, so long look-backs delay the first trade.</p>
-
-    <h3>Capital &amp; costs</h3>
-    <label class="f" for="cash">Starting cash ($)</label><input type="number" id="cash" min="1000" step="1000">
-    <div class="two">
-      <div><label class="f" for="slip">Slippage (bps/fill)</label><input type="number" id="slip" min="0" max="200" step="1"></div>
-      <div><label class="f" for="cps">Commission ($/share)</label><input type="number" id="cps" min="0" max="1" step="0.001"></div>
-    </div>
-    <label class="f" for="minc">Minimum commission ($/order)</label><input type="number" id="minc" min="0" max="50" step="0.5">
-    <p style="margin:14px 0 0"><button class="ghost" id="reset">Reset to defaults</button> <button class="ghost" id="copy">Copy link</button></p>
+    <details open><summary>Presets</summary><div class="presets" id="presets" style="margin-top:8px"></div></details>
+    <details open><summary>Strategy</summary>
+      <select id="strategy" aria-label="Strategy" style="margin-top:8px"></select>
+      <div id="params"></div>
+      <div class="err" id="err" role="alert"></div>
+    </details>
+    <details open><summary>Universe</summary>
+      <div id="universe"></div>
+      <label class="f" for="bench">Benchmark (buy &amp; hold)</label>
+      <select id="bench"></select>
+    </details>
+    <details open><summary>Window</summary>
+      <div class="two">
+        <div><label class="f" for="start">Start</label><input type="date" id="start"></div>
+        <div><label class="f" for="end">End</label><input type="date" id="end"></div>
+      </div>
+      <p class="hint">Indicators warm up inside the window, so long look-backs delay the first trade.</p>
+    </details>
+    <details open><summary>Capital &amp; costs</summary>
+      <label class="f" for="cash">Starting cash ($)</label><input type="number" id="cash" min="1000" step="1000">
+      <div class="two">
+        <div><label class="f" for="slip">Slippage (bps/fill)</label><input type="number" id="slip" min="0" max="200" step="1"></div>
+        <div><label class="f" for="cps">Commission ($/sh)</label><input type="number" id="cps" min="0" max="1" step="0.001"></div>
+      </div>
+      <label class="f" for="minc">Minimum commission ($/order)</label><input type="number" id="minc" min="0" max="50" step="0.5">
+    </details>
+    <div class="actions"><button class="btn ghost" id="reset">Reset</button><button class="btn" id="copy">Copy link</button></div>
   </aside>
 
-  <section class="main" id="main">
+  <main class="main" id="main">
     <div class="loading" id="loading">Loading price data…</div>
     <div id="out" hidden>
-      <p class="summary" id="summary"></p>
-      <div class="kpis" id="kpis" style="margin-top:12px"></div>
-
-      <div class="panel" style="margin-top:16px">
-        <div class="ph"><strong>Growth of starting cash</strong>
-          <div class="legend"><span><i class="dot" style="background:var(--c-strat)"></i><span id="lg-strat">Strategy</span></span><span id="lg-bench-wrap"><i class="dot" style="background:var(--c-bench)"></i><span id="lg-bench"></span></span>
-          <label class="toggle"><input type="checkbox" id="log" checked>log scale</label></div></div>
-        <div class="cbox"><canvas id="eq"></canvas></div>
+      <div class="head">
+        <h1 id="title"></h1><div class="chips" id="meta"></div>
       </div>
-      <div class="panel" style="margin-top:16px"><div class="ph"><strong>Drawdown</strong></div><div class="cbox s"><canvas id="dd"></canvas></div></div>
-      <div class="panel" style="margin-top:16px"><div class="ph"><strong>Exposure</strong><span class="hint" style="margin:0">share of equity held in positions</span></div><div class="cbox s"><canvas id="ex"></canvas></div></div>
+      <section class="kpis" id="kpis" aria-label="Key metrics"></section>
 
-      <div class="panel" style="margin-top:16px">
-        <div class="ph"><strong>Event inspector</strong><span class="hint" style="margin:0">step through the exact event stream, bar by bar</span></div>
+      <section class="card panel" aria-labelledby="h-eq">
+        <div class="ph">
+          <div><h2 id="h-eq">Equity curve</h2><p>Growth of starting cash, with entries and exits. Shaded bands mark time in the market.</p></div>
+          <div class="legend" id="lg-eq"></div>
+        </div>
+        <div class="cbox xl"><canvas id="eq" role="img" aria-label="Equity curve of the strategy versus the benchmark"></canvas></div>
+      </section>
+
+      <div class="grid2">
+        <section class="card panel" aria-labelledby="h-dd">
+          <div class="ph"><div><h2 id="h-dd">Drawdown</h2><p>Distance below the previous equity peak.</p></div></div>
+          <div class="cbox m"><canvas id="dd" role="img" aria-label="Drawdown chart"></canvas></div>
+        </section>
+        <section class="card panel" aria-labelledby="h-rs">
+          <div class="ph"><div><h2 id="h-rs">Rolling 1-year Sharpe</h2><p>Annualised, 252-bar window; blank while flat.</p></div></div>
+          <div class="cbox m"><canvas id="rs" role="img" aria-label="Rolling one-year Sharpe ratio"></canvas></div>
+        </section>
+      </div>
+
+      <div class="grid2">
+        <section class="card panel" aria-labelledby="h-an">
+          <div class="ph"><div><h2 id="h-an">Calendar-year returns</h2><p>Strategy vs benchmark.</p></div></div>
+          <div class="cbox m"><canvas id="an" role="img" aria-label="Calendar year returns"></canvas></div>
+        </section>
+        <section class="card panel" aria-labelledby="h-hi">
+          <div class="ph"><div><h2 id="h-hi">Daily return distribution</h2><p id="hi-note"></p></div></div>
+          <div class="cbox m"><canvas id="hi" role="img" aria-label="Histogram of daily returns"></canvas></div>
+        </section>
+      </div>
+
+      <div class="grid2">
+        <section class="card panel" aria-labelledby="h-ex">
+          <div class="ph"><div><h2 id="h-ex">Exposure</h2><p>Share of equity held in positions.</p></div></div>
+          <div class="cbox"><canvas id="ex" role="img" aria-label="Exposure over time"></canvas></div>
+        </section>
+        <section class="card panel" aria-labelledby="h-co">
+          <div class="ph"><div><h2 id="h-co">Cumulative trading costs</h2><p>Commission plus slippage paid so far.</p></div></div>
+          <div class="cbox"><canvas id="co" role="img" aria-label="Cumulative trading costs"></canvas></div>
+        </section>
+      </div>
+
+      <section class="card panel" aria-labelledby="h-te">
+        <div class="ph"><div><h2 id="h-te">Tearsheet</h2><p>Strategy against benchmark over the selected window.</p></div></div>
+        <div class="scroll" style="max-height:none"><table class="tear" id="tear"></table></div>
+      </section>
+
+      <section class="card panel" aria-labelledby="h-in">
+        <div class="ph"><div><h2 id="h-in">Event inspector</h2><p>Step through the real event stream, bar by bar. The selected bar is marked on the charts above.</p></div></div>
         <div class="insp">
           <div class="bar">
-            <button id="prevSig" title="Previous bar with a signal">◀ signal</button>
+            <button class="btn" id="prevSig" title="Previous bar with a signal">◀ Signal</button>
             <input type="range" id="bar" min="0" value="0" aria-label="Bar">
-            <button id="nextSig" title="Next bar with a signal">signal ▶</button>
+            <button class="btn" id="nextSig" title="Next bar with a signal">Signal ▶</button>
           </div>
           <div class="state" id="state"></div>
           <pre id="events"></pre>
-          <p class="hint" style="margin:0">Orders raised at one bar's close are filled at the <em>next</em> bar's open: look for a <code>FILL</code> on the bar after each <code>ORDER</code>.</p>
+          <p class="hint" style="margin:0">Orders raised at one bar's close fill at the <em>next</em> bar's open: look for a <code>FILL</code> on the bar after each <code>ORDER</code>.</p>
         </div>
-      </div>
+      </section>
 
-      <div class="panel" style="margin-top:16px"><div class="ph"><strong>Monthly returns</strong></div><div class="heat" id="monthly"></div></div>
+      <section class="card panel" aria-labelledby="h-mo">
+        <div class="ph"><div><h2 id="h-mo">Monthly returns</h2><p>Strategy, percent.</p></div></div>
+        <div class="heat" id="monthly"></div>
+      </section>
 
-      <div class="panel" style="margin-top:16px">
-        <div class="ph"><strong>Closed trades</strong><span class="hint" style="margin:0" id="trade-note"></span></div>
+      <section class="card panel" aria-labelledby="h-tr">
+        <div class="ph"><div><h2 id="h-tr">Closed trades</h2><p id="trade-note"></p></div></div>
         <div class="scroll"><table id="trades"></table></div>
-      </div>
-      <p class="hint" style="margin:16px 0 0" id="foot"></p>
+      </section>
+      <p class="foot" id="foot"></p>
     </div>
-  </section>
+  </main>
 </div>
 <script type="module" src="app.js"></script>
 </body>
