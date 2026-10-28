@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Event-Driven Backtester</title>
+<meta name="description" content="A small Python backtester where every component talks through one event queue, so a strategy can only ever see the past. Results, look-ahead demo and parameter sweep on real SPY/TLT/GLD data.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#fafaf8; --surface:#ffffff; --text:#1c1f24; --muted:#5d6672; --line:#e3e5e8; --grid:#ececea;
+  --accent:#2a6df4; --warn:#c2410c; --good:#0b7a5a; --code-bg:#f2f3f1;
+  --c-hold:#7d8590; --c-sma:#2a6df4; --c-rsi:#e8590c; --c-trend:#0ca678;
+  --c-naive:#d6336c; --c-lagged:#7d8590; --c-engine:#2a6df4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111418; --surface:#181c21; --text:#e7e9ec; --muted:#9aa4b0; --line:#2a3037; --grid:#242a31;
+    --accent:#6ea0ff; --warn:#ff9a62; --good:#45d6a6; --code-bg:#1d2228;
+    --c-hold:#9aa4b0; --c-sma:#6ea0ff; --c-rsi:#ff9a62; --c-trend:#45d6a6; --c-naive:#ff7aa8; --c-lagged:#9aa4b0; --c-engine:#6ea0ff;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:0 20px}
+header.hero{padding:56px 0 28px;border-bottom:1px solid var(--line)}
+.eyebrow{font:600 12px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font-size:clamp(30px,5vw,46px);line-height:1.1;margin:14px 0 14px;letter-spacing:-.02em}
+.lede{font-size:18px;color:var(--muted);max-width:680px;margin:0 0 24px}
+.links a{display:inline-block;margin-right:10px;padding:8px 14px;border:1px solid var(--line);border-radius:8px;color:var(--text);text-decoration:none;font-weight:600;font-size:14px;background:var(--surface)}
+.links a.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:28px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.stat b{display:block;font-size:24px;letter-spacing:-.01em}
+.stat span{font-size:13px;color:var(--muted)}
+section{padding:44px 0 8px}
+h2{font-size:26px;letter-spacing:-.01em;margin:0 0 6px}
+h2 + p.sub{color:var(--muted);margin:0 0 20px;max-width:720px}
+h3{font-size:16px;margin:24px 0 8px}
+p{margin:0 0 14px;max-width:760px}
+.card{min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px}
+.chart-box{position:relative;height:380px}
+.chart-box.short{height:260px}
+.row{display:flex;gap:14px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:10px}
+.toggle{font-size:14px;color:var(--muted);user-select:none}
+.toggle input{margin-right:6px}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-weight:600;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+.scroll{overflow-x:auto}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;vertical-align:baseline}
+pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+pre{background:var(--code-bg);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-size:13px;line-height:1.55;margin:0}
+code{background:var(--code-bg);padding:1px 5px;border-radius:4px;font-size:.9em}
+pre code{background:none;padding:0}
+.ev-MARKET{color:var(--muted)} .ev-BAR_CLOSE{color:var(--accent)} .ev-SIGNAL{color:var(--warn)} .ev-ORDER{color:#a259d9} .ev-FILL{color:var(--good);font-weight:600}
+.callout{border-left:3px solid var(--accent);background:var(--surface);padding:12px 16px;border-radius:0 10px 10px 0;margin:16px 0;max-width:760px}
+.callout.warn{border-left-color:var(--warn)}
+.grid2>*{min-width:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+.heat td{text-align:center;padding:7px 4px;font-variant-numeric:tabular-nums;border:1px solid var(--bg)}
+.heat th{text-align:center}
+.heat td.best{outline:2px solid var(--text);outline-offset:-2px;font-weight:700}
+.heat td.na{color:var(--muted)}
+.pos{color:var(--good)} .neg{color:var(--warn)}
+svg text{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.diagram{width:100%;height:auto}
+ol.steps{padding-left:20px;max-width:760px} ol.steps li{margin-bottom:8px}
+footer{margin-top:56px;padding:28px 0 56px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+footer a{color:var(--accent)}
+.compare th:first-child{width:28%}
+.compare td{white-space:normal;text-align:left;vertical-align:top}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Python · Event-driven · Look-ahead-safe</div>
+    <h1>Event-Driven Backtester</h1>
+    <p class="lede">A new price arrives, the strategy emits a signal, an order goes out and it fills with costs, one event at a time. Because components can only talk through a single queue, a strategy never gets to peek at tomorrow.</p>
+    <div class="links">
+      <a class="primary" href="https://github.com/jainamh029/event-driven-backtester">View on GitHub</a>
+      <a href="#results">Jump to results</a>
+      <a href="#lookahead">See the look-ahead bug</a>
+    </div>
+    <div class="stats" id="hero-stats"></div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section id="how">
+  <h2>How it works</h2>
+  <p class="sub">Five event types, four components, one queue. Nothing calls anything else directly.</p>
+  <div class="card">
+    <svg class="diagram" viewBox="0 0 800 330" role="img" aria-label="Diagram: DataHandler emits MARKET and BAR_CLOSE events; Execution fills orders on MARKET; Strategy reacts to BAR_CLOSE with SIGNAL; Portfolio turns SIGNAL into ORDER; Execution returns FILL to Portfolio. All arrows pass through the event queue.">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker>
+      </defs>
+      <g fill="none" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#arr)">
+        <path d="M168 138 C230 100 250 80 300 70"/>
+        <path d="M168 192 C230 230 250 250 300 262"/>
+        <path d="M490 62 C560 70 590 100 612 130"/>
+        <path d="M630 196 C600 232 560 250 500 258"/>
+        <path d="M520 276 C590 285 640 250 666 196"/>
+      </g>
+      <g font-size="12" fill="var(--text)">
+        <text x="196" y="92" fill="var(--accent)">BAR_CLOSE</text>
+        <text x="196" y="246" fill="var(--muted)">MARKET</text>
+        <text x="548" y="62" fill="var(--warn)">SIGNAL</text>
+        <text x="520" y="236" fill="#a259d9">ORDER</text>
+        <text x="610" y="290" fill="var(--good)">FILL</text>
+      </g>
+      <g stroke="var(--line)" stroke-width="1.5" fill="var(--surface)">
+        <rect x="20" y="130" width="148" height="68" rx="10"/>
+        <rect x="300" y="36" width="190" height="68" rx="10"/>
+        <rect x="300" y="228" width="190" height="68" rx="10"/>
+        <rect x="570" y="130" width="190" height="68" rx="10"/>
+      </g>
+      <g font-size="14" font-weight="700" fill="var(--text)" text-anchor="middle">
+        <text x="94" y="160">DataHandler</text>
+        <text x="395" y="66">Strategy</text>
+        <text x="395" y="258">Execution</text>
+        <text x="665" y="160">Portfolio</text>
+      </g>
+      <g font-size="11" fill="var(--muted)" text-anchor="middle">
+        <text x="94" y="180">history up to now</text>
+        <text x="395" y="86">decides at bar close</text>
+        <text x="395" y="278">fills at next open</text>
+        <text x="665" y="180">sizing · cash · P&amp;L</text>
+      </g>
+      <text x="400" y="176" font-size="12" fill="var(--muted)" text-anchor="middle">every arrow goes through the event queue</text>
+    </svg>
+  </div>
+
+  <h3>The timing rule that prevents look-ahead</h3>
+  <ol class="steps">
+    <li><b>Bar t opens</b> (<code>MARKET</code>): orders placed yesterday fill at today's open, plus slippage and commission.</li>
+    <li><b>Bar t closes</b> (<code>BAR_CLOSE</code>): the portfolio marks to market; the strategy may use bars up to and including t.</li>
+    <li>The strategy emits a <code>SIGNAL</code>; the portfolio sizes it and emits an <code>ORDER</code>; execution <em>holds it</em> until bar t+1 opens.</li>
+  </ol>
+  <p>So a decision can never be filled at a price that was used to make it. The <code>DataHandler</code> owns the full dataset but only has methods that return rows up to the current bar, and the test-suite checks the property directly: truncate or corrupt every bar after <i>k</i> and the results up to <i>k</i> don't change.</p>
+
+  <h3>A real slice of the event stream</h3>
+  <p>From the SMA 50/200 run on SPY, around its first trade. Note the order is placed on the 17th and filled on the 18th, at that day's open.</p>
+  <pre id="trace"></pre>
+</section>
+
+<section id="results">
+  <h2>Results</h2>
+  <p class="sub" id="results-sub"></p>
+  <div class="card">
+    <div class="row">
+      <strong>Growth of $100,000</strong>
+      <label class="toggle"><input type="checkbox" id="logscale" checked>log scale</label>
+    </div>
+    <div class="chart-box"><canvas id="equity-chart"></canvas></div>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <strong>Drawdown</strong>
+    <div class="chart-box short"><canvas id="dd-chart"></canvas></div>
+  </div>
+  <div class="card scroll" style="margin-top:14px"><table id="metrics-table"></table></div>
+  <div class="callout" id="results-note"></div>
+</section>
+
+<section id="lookahead">
+  <h2>Why event-driven? A look-ahead demo</h2>
+  <p class="sub">Same idea, three ways to test it: <em>"go long if today closed up."</em> You can't know that until the close, so it can't be traded at the close.</p>
+  <div class="card">
+    <div class="row"><strong>Growth of $100,000 (log scale)</strong></div>
+    <div class="chart-box"><canvas id="la-chart"></canvas></div>
+  </div>
+  <div class="card scroll" style="margin-top:14px"><table id="la-table"></table></div>
+  <div class="callout warn" id="la-note"></div>
+  <h3>Does the same bug matter for a sane strategy?</h3>
+  <div class="card scroll"><table id="la-sma-table"></table></div>
+  <p style="margin-top:14px;color:var(--muted)">For slow trend signals the bias is small, which is exactly why it's dangerous: it slips through, looks harmless, and then shows up in the strategies where it isn't.</p>
+</section>
+
+<section id="sweep">
+  <h2>Parameter sweep, in-sample vs out-of-sample</h2>
+  <p class="sub" id="sweep-sub"></p>
+  <div class="grid2">
+    <div class="card"><strong id="heat-is-title"></strong><div class="scroll"><table class="heat" id="heat-is"></table></div></div>
+    <div class="card"><strong id="heat-oos-title"></strong><div class="scroll"><table class="heat" id="heat-oos"></table></div></div>
+  </div>
+  <div class="callout" id="sweep-note"></div>
+</section>
+
+<section id="costs">
+  <h2>Costs are not a footnote</h2>
+  <p class="sub">The same signals, re-run with different slippage (per side). Commission is $0.005/share with a $1 minimum, except in the frictionless row.</p>
+  <div class="card scroll"><table id="cost-table"></table></div>
+  <div class="callout" id="cost-note"></div>
+</section>
+
+<section id="fills">
+  <h2>Last fills, SMA 50/200</h2>
+  <div class="card scroll"><table id="fills-table"></table></div>
+</section>
+
+<section id="compare">
+  <h2>Vectorized vs event-driven</h2>
+  <div class="card scroll">
+    <table class="compare">
+      <tr><th></th><th style="text-align:left">Vectorized</th><th style="text-align:left">Event-driven</th></tr>
+      <tr><td>Speed</td><td>Whole series in one pass</td><td>One bar at a time, so slower (this site's sweeps still run in seconds)</td></tr>
+      <tr><td>Look-ahead</td><td>Easy to introduce with one missing <code>shift(1)</code></td><td>Structurally prevented: strategies only get history up to now</td></tr>
+      <tr><td>Execution</td><td>Approximated (close-to-close, flat costs)</td><td>Orders, next-open fills, slippage, commission, buying-power limits</td></tr>
+      <tr><td>Live trading</td><td>Different code path</td><td>Same loop; swap the simulated broker for a real one</td></tr>
+      <tr><td>Best for</td><td>Quick idea screening</td><td>Validating anything you might trade</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="run">
+  <h2>Run it yourself</h2>
+<pre><code>git clone https://github.com/jainamh029/event-driven-backtester
+cd event-driven-backtester
+python -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -e ".[dev]"
+
+python -m evbt --strategy sma --symbol SPY      # one backtest
+pytest                                          # incl. the causality tests
+python scripts/build_report.py                  # regenerate this page</code></pre>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Educational project, not investment advice. Prices are daily dividend- and split-adjusted bars from Yahoo Finance (via <code>yfinance</code>), committed to the repo as CSV so every number here is reproducible. Past performance, simulated or otherwise, doesn't predict future results. Page generated <span id="gen"></span>.</p>
+    <p>Further reading: <a href="https://pypi.org/project/sandtable/">sandtable</a> and <a href="https://pypi.org/project/alphalens-core/">alphalens-core</a> (mature event-driven libraries), Yves Hilpisch, <a href="https://www.oreilly.com/library/view/python-for-finance/9781492024323/">Python for Finance</a>, Part IV.</p>
+  </div>
+</footer>
+
+<script>
+const DATA = __DATA__;
+
+const $ = (id) => document.getElementById(id);
+const pct = (x, d = 1) => (x === null || x === undefined ? "n/a" : (x * 100).toFixed(d) + "%");
+const num = (x, d = 2) => (x === null || x === undefined ? "n/a" : x.toFixed(d));
+const usd = (x) => "$" + Math.round(x).toLocaleString("en-US");
+const mult = (x) => (x >= 1000 ? x.toExponential(1).replace("e+", "e") : x.toFixed(2)) + "×";
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const COLORS = { hold: "--c-hold", sma: "--c-sma", rsi2: "--c-rsi", trend: "--c-trend", naive: "--c-naive", lagged: "--c-lagged", engine: "--c-engine" };
+
+/* ---------- hero + intro ---------- */
+const S = Object.fromEntries(DATA.strategies.map((s) => [s.key, s]));
+const totalEvents = Object.values(DATA.event_counts.rsi2).reduce((a, b) => a + b, 0);
+$("hero-stats").innerHTML = [
+  [DATA.data.bars.toLocaleString("en-US"), "daily bars, " + DATA.data.start.slice(0, 4) + "–" + DATA.data.end.slice(0, 4)],
+  [totalEvents.toLocaleString("en-US"), "events in one RSI(2) run"],
+  [DATA.data.symbols.length, "assets: " + DATA.data.symbols.join(", ")],
+  ["t → t+1", "decide at the close, fill at the next open"],
+].map(([b, s]) => `<div class="stat"><b>${b}</b><span>${s}</span></div>`).join("");
+$("results-sub").textContent = `Daily bars ${DATA.data.start} to ${DATA.data.end}. Costs: ${DATA.costs.slippage_bps} bps slippage per fill, $${DATA.costs.commission_per_share}/share commission ($${DATA.costs.min_commission} minimum). Start capital ${usd(DATA.costs.initial_cash)}, long-only, no leverage.`;
+$("gen").textContent = DATA.generated;
+$("trace").innerHTML = DATA.trace.map((l) => `<span class="ev-${l.split(/\s+/)[0]}">${l.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</span>`).join("\n");
+
+/* ---------- charts ---------- */
+const charts = [];
+function baseOptions(logY, yFmt, keep = [1, 2, 5]) {
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: {
+      legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8, color: css("--text") } },
+      tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${yFmt(c.parsed.y)}` } },
+    },
+    scales: {
+      x: { ticks: { maxTicksLimit: 8, color: css("--muted"), callback(v) { return this.getLabelForValue(v).slice(0, 4); } }, grid: { display: false } },
+      y: { type: logY ? "logarithmic" : "linear", ticks: {
+        color: css("--muted"),
+        callback(v) {
+          if (this.chart.options.scales.y.type === "logarithmic" && !keep.includes(Math.round(v / 10 ** Math.floor(Math.log10(v))))) return "";
+          return yFmt(v);
+        },
+      },
+      grid: { color: css("--grid") },
+    },
+    },
+  };
+}
+function lineSet(label, data, color, extra = {}) {
+  return { label, data, borderColor: color, backgroundColor: color, borderWidth: 1.8, pointRadius: 0, pointHoverRadius: 3, tension: 0, ...extra };
+}
+const compactUsd = (v) => (v >= 1e6 ? "$" + +(v / 1e6).toFixed(1) + "M" : v >= 1e3 ? "$" + Math.round(v / 1e3) + "k" : "$" + Math.round(v));
+const compactBig = (v) => (v >= 1e9 ? "$10^" + Math.round(Math.log10(v)) : compactUsd(v));
+
+const equityChart = new Chart($("equity-chart"), {
+  type: "line",
+  data: { labels: DATA.dates, datasets: DATA.strategies.map((s) => lineSet(s.label, s.equity, css(COLORS[s.key]), { _k: s.key })) },
+  options: baseOptions(true, compactUsd),
+});
+const ddChart = new Chart($("dd-chart"), {
+  type: "line",
+  data: { labels: DATA.dates, datasets: DATA.strategies.map((s) => lineSet(s.label, s.drawdown, css(COLORS[s.key]), { _k: s.key, borderWidth: 1.2 })) },
+  options: baseOptions(false, (v) => pct(v, 0)),
+});
+const laChart = new Chart($("la-chart"), {
+  type: "line",
+  data: { labels: DATA.dates, datasets: DATA.lookahead.curves.map((c) => lineSet(c.label, c.equity, css(COLORS[c.key]), { _k: c.key })) },
+  options: baseOptions(true, compactBig, [1]),
+});
+charts.push(equityChart, ddChart, laChart);
+$("logscale").addEventListener("change", (e) => {
+  equityChart.options.scales.y.type = e.target.checked ? "logarithmic" : "linear";
+  equityChart.update();
+});
+function recolor() {
+  for (const ch of charts) {
+    ch.data.datasets.forEach((d) => { const c = css(COLORS[d._k]); d.borderColor = c; d.backgroundColor = c; });
+    ch.options.plugins.legend.labels.color = css("--text");
+    ch.options.scales.x.ticks.color = css("--muted");
+    ch.options.scales.y.ticks.color = css("--muted");
+    ch.options.scales.y.grid.color = css("--grid");
+    ch.update();
+  }
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", recolor);
+
+/* ---------- metrics table ---------- */
+const rows = [
+  ["Total return", (m) => pct(m.total_return, 0)],
+  ["CAGR", (m) => pct(m.cagr)],
+  ["Volatility", (m) => pct(m.volatility)],
+  ["Sharpe", (m) => num(m.sharpe)],
+  ["Sortino", (m) => num(m.sortino)],
+  ["Max drawdown", (m) => pct(m.max_drawdown)],
+  ["Calmar", (m) => num(m.calmar)],
+  ["Round-trip trades", (m) => m.trades],
+  ["Win rate", (m) => (m.trades ? pct(m.win_rate, 0) : "–")],
+];
+$("metrics-table").innerHTML =
+  "<tr><th></th>" + DATA.strategies.map((s) => `<th><span class="dot" style="background:var(${COLORS[s.key]})"></span>${s.label.replace(/ \(.*\)$/, "")}</th>`).join("") + "</tr>" +
+  rows.map(([n, f]) => `<tr><td>${n}</td>${DATA.strategies.map((s) => `<td>${f(s.metrics)}</td>`).join("")}</tr>`).join("") +
+  `<tr><td>Costs paid</td>${DATA.strategies.map((s) => `<td>${usd(s.costs)}</td>`).join("")}</tr>`;
+
+(() => {
+  const h = S.hold.metrics, t = S.trend.metrics, s = S.sma.metrics, r = S.rsi2.metrics;
+  $("results-note").innerHTML =
+    `<b>Reading the table.</b> Buy &amp; hold made the most money (${pct(h.cagr)} CAGR) but took a ${pct(h.max_drawdown, 0)} drawdown. ` +
+    `The SMA crossover gave up ${num((h.cagr - s.cagr) * 100, 1)} points of CAGR for a ${pct(s.max_drawdown, 0)} worst drawdown. ` +
+    `The multi-asset trend filter had the best Sharpe (${num(t.sharpe)}) with a ${pct(t.max_drawdown, 0)} drawdown. ` +
+    `RSI(2) trades constantly (${r.trades} round trips) and ends up with ${pct(r.cagr)} CAGR, which is a cost story: see below. None of this is a recommendation; it's what the engine reports on this data.`;
+})();
+
+/* ---------- look-ahead ---------- */
+const laRow = (c) => `<tr><td><span class="dot" style="background:var(${COLORS[c.key] || "--c-hold"})"></span>${c.label}</td><td>${mult(1 + c.metrics.total_return)}</td><td>${pct(c.metrics.cagr, 0)}</td><td>${num(c.metrics.sharpe)}</td><td>${pct(c.metrics.max_drawdown, 0)}</td></tr>`;
+const laHead = "<tr><th></th><th>Growth multiple</th><th>CAGR</th><th>Sharpe</th><th>Max DD</th></tr>";
+$("la-table").innerHTML = laHead + DATA.lookahead.curves.map(laRow).join("");
+$("la-sma-table").innerHTML = laHead + DATA.lookahead.sma.map(laRow).join("");
+(() => {
+  const [naive, lagged, eng] = DATA.lookahead.curves;
+  $("la-note").innerHTML =
+    `<b>A Sharpe of ${num(naive.metrics.sharpe, 1)} should make you suspicious, not rich.</b> The un-lagged vectorized test "earns" each day's return using a signal built from that same day's close. ` +
+    `Shift the signal by one bar and the edge is gone (Sharpe ${num(lagged.metrics.sharpe)}). In the event-driven engine the same strategy can't cheat: the order only fills at tomorrow's open, and the costs of flipping in and out about every other day take it to ${mult(1 + eng.metrics.total_return)} (Sharpe ${num(eng.metrics.sharpe)}).`;
+})();
+
+/* ---------- sweep ---------- */
+(() => {
+  const sw = DATA.sweep, cell = (f, s) => sw.cells.find((c) => c.fast === f && c.slow === s);
+  const bi = sw.best_is;
+  $("sweep-sub").textContent = `SMA crossover on SPY, ${sw.fasts.length}×${sw.slows.length} grid of fast/slow windows. Parameters are picked on data before ${sw.split} and then judged on data after it. Cells show Sharpe.`;
+  $("heat-is-title").textContent = `In-sample Sharpe (before ${sw.split})`;
+  $("heat-oos-title").textContent = `Out-of-sample Sharpe (from ${sw.split})`;
+  const build = (id, key) => {
+    const vals = sw.cells.map((c) => c[key]), mx = Math.max(...sw.cells.flatMap((c) => [Math.abs(c.is_sharpe), Math.abs(c.oos_sharpe)]));
+    let html = "<tr><th>fast \\ slow</th>" + sw.slows.map((s) => `<th>${s}</th>`).join("") + "</tr>";
+    for (const f of sw.fasts) {
+      html += `<tr><th>${f}</th>`;
+      for (const s of sw.slows) {
+        const c = cell(f, s);
+        if (!c) { html += '<td class="na">–</td>'; continue; }
+        const v = c[key], a = Math.min(Math.abs(v) / mx, 1) * 0.55 + 0.05;
+        const bg = v >= 0 ? `rgba(42,109,244,${a})` : `rgba(232,89,12,${a})`;
+        html += `<td style="background:${bg}" class="${f === bi.fast && s === bi.slow ? "best" : ""}">${num(v)}</td>`;
+      }
+      html += "</tr>";
+    }
+    $(id).innerHTML = html;
+  };
+  build("heat-is", "is_sharpe");
+  build("heat-oos", "oos_sharpe");
+  $("sweep-note").innerHTML =
+    `<b>The outlined cell</b> (${bi.fast}/${bi.slow}) was the best in-sample pick: Sharpe ${num(bi.is_sharpe)} before the split, <b>${num(bi.oos_sharpe)}</b> after it. ` +
+    `The median out-of-sample Sharpe across the whole grid was ${num(sw.oos_median)} and the best cell reached ${num(sw.oos_best)}, so ` +
+    (bi.oos_sharpe >= sw.oos_median - 0.05 ? "the in-sample winner held up about as well as a typical neighbour, which is what a robust (non-overfit) result looks like. " : "the in-sample winner did worse than a typical neighbour, a classic sign of overfitting. ") +
+    `For reference, buy &amp; hold scored ${num(sw.hold_is)} before and ${num(sw.hold_oos)} after.`;
+})();
+
+/* ---------- costs ---------- */
+(() => {
+  $("cost-table").innerHTML =
+    "<tr><th>Strategy</th><th>Slippage / side</th><th>Round trips</th><th>CAGR</th><th>Sharpe</th><th>Costs paid</th></tr>" +
+    DATA.cost_sensitivity.map((r) => `<tr><td>${r.strategy}</td><td>${r.bps === 0 ? "0 bps (no commission)" : r.bps + " bps"}</td><td>${r.trades}</td><td class="${r.cagr < 0 ? "neg" : ""}">${pct(r.cagr)}</td><td>${num(r.sharpe)}</td><td>${usd(r.costs)}</td></tr>`).join("");
+  const rs = DATA.cost_sensitivity.filter((r) => r.strategy.startsWith("RSI")), sm = DATA.cost_sensitivity.filter((r) => r.strategy.startsWith("SMA"));
+  $("cost-note").innerHTML =
+    `<b>Frequency decides how much friction hurts.</b> The SMA crossover (${sm[0].trades} trades) barely notices: CAGR ${pct(sm[0].cagr)} frictionless vs ${pct(sm[3].cagr)} at ${sm[3].bps} bps. ` +
+    `RSI(2) (${rs[0].trades} trades) goes from ${pct(rs[0].cagr)} to ${pct(rs[3].cagr)}. A backtest without a cost model would have called both fine.`;
+})();
+
+/* ---------- fills ---------- */
+$("fills-table").innerHTML =
+  "<tr><th>Date</th><th>Side</th><th>Qty</th><th>Open</th><th>Fill</th><th>Commission</th><th>Slippage cost</th></tr>" +
+  DATA.last_fills.map((f) => `<tr><td>${f.timestamp}</td><td>${f.side}</td><td>${f.quantity}</td><td>${num(f.ref_price)}</td><td>${num(f.fill_price)}</td><td>$${num(f.commission)}</td><td>$${num(f.slippage_cost)}</td></tr>`).join("");
+</script>
+</body>
+</html>
