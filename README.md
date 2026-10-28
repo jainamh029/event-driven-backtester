@@ -2,7 +2,8 @@
 
 A small Python backtester where **every component talks through one event queue**: a new price arrives, the strategy emits a signal, an order goes out, and it fills with slippage and commission. It's much closer to how live trading works than looping over a spreadsheet of prices, and it stops a strategy from accidentally using future data.
 
-**Live report:** https://jainamh029.github.io/event-driven-backtester/
+**Live report:** https://jainamh029.github.io/event-driven-backtester/  
+**Interactive dashboard:** https://jainamh029.github.io/event-driven-backtester/dashboard/ (pick a strategy, parameters, costs and date range; the backtest re-runs in your browser)
 
 ```
             ┌────────────────────── EventQueue ──────────────────────┐
@@ -71,6 +72,7 @@ print(result.metrics["sharpe"], result.total_costs)
 ## What's inside
 
 ```
+docs/dashboard/   interactive dashboard: engine.js (JS port of evbt), app.js, index.html
 src/evbt/
   events.py      event types + EventQueue
   data.py        DataHandler (history only, aligned multi-symbol)
@@ -81,7 +83,7 @@ src/evbt/
   metrics.py     CAGR, vol, Sharpe, Sortino, drawdown, Calmar, win rate, profit factor
   vectorized.py  deliberately simple vectorized backtest, for the look-ahead comparison
   research.py    SMA parameter sweep with in-sample / out-of-sample scoring
-scripts/         fetch_data.py, build_report.py
+scripts/         fetch_data.py, build_report.py, check_js_parity.mjs (JS engine vs Python results)
 site/template.html → docs/index.html   (the GitHub Pages report)
 ```
 
@@ -97,6 +99,12 @@ SPY / TLT / GLD daily bars, 2005-01-03 → 2026-10-27, $100k start, long-only, 5
 | 200-day trend filter, SPY+TLT+GLD | 5.9% | 0.74 | -15.5% | 262 | $17,890 |
 
 These are what the engine reports on this data, not recommendations. RSI(2) is the instructive one: 6.2% CAGR with no costs, 3.9% at 5 bps, −4.4% at 25 bps. The [report](https://jainamh029.github.io/event-driven-backtester/) has the charts, the look-ahead demo and the parameter sweep.
+
+## The dashboard
+
+`docs/dashboard/` is a static page (no server, no build step) that re-runs the backtest on every control change: strategy and its parameters, asset universe, benchmark, date window, starting cash, slippage and commission. It shows KPIs against a buy & hold benchmark, equity / drawdown / exposure charts, monthly returns, closed trades, and an **event inspector** that steps through the real `MARKET → BAR_CLOSE → SIGNAL → ORDER → FILL` stream bar by bar. Settings live in the URL hash, so any view can be shared by link.
+
+The engine in `docs/dashboard/engine.js` is a line-for-line port of `src/evbt` (same queue, same handlers, same timing rule). To keep the two honest, `node scripts/check_js_parity.mjs` re-runs every report strategy in JavaScript and compares it to the Python results (same fills, same costs, same metrics); CI runs it on every push. To preview locally: `python -m http.server -d docs` and open `/dashboard/`.
 
 ## Design choices and limits
 

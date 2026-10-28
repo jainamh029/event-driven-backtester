@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backtest Dashboard · Event-Driven Backtester</title>
+<meta name="description" content="Interactive dashboard: pick a strategy, parameters, costs and date range, and the event-driven backtest re-runs live in your browser on SPY, TLT and GLD data.">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#fafaf8; --surface:#ffffff; --text:#1c1f24; --muted:#5d6672; --line:#e3e5e8; --grid:#ececea;
+  --accent:#2a6df4; --warn:#c2410c; --good:#0b7a5a; --code-bg:#f2f3f1;
+  --c-strat:#2a6df4; --c-bench:#7d8590; --c-expo:#0ca678;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111418; --surface:#181c21; --text:#e7e9ec; --muted:#9aa4b0; --line:#2a3037; --grid:#242a31;
+    --accent:#6ea0ff; --warn:#ff9a62; --good:#45d6a6; --code-bg:#1d2228;
+    --c-strat:#6ea0ff; --c-bench:#9aa4b0; --c-expo:#45d6a6;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+a{color:var(--accent)}
+.topbar{border-bottom:1px solid var(--line);background:var(--surface)}
+.topbar .in{max-width:1240px;margin:0 auto;padding:12px 20px;display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.topbar b{font-size:16px;letter-spacing:-.01em}
+.topbar nav a{margin-left:16px;font-size:14px;text-decoration:none;font-weight:600}
+.layout{max-width:1240px;margin:0 auto;padding:20px;display:grid;grid-template-columns:300px minmax(0,1fr);gap:20px;align-items:start}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.controls{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+@media(max-width:900px){.controls{position:static;max-height:none}}
+.controls h3{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:18px 0 8px}
+.controls h3:first-child{margin-top:0}
+label.f{display:block;font-size:13px;margin:8px 0 2px;color:var(--muted)}
+select,input[type=number],input[type=date]{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--text);font:inherit}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+.slider .top{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+.slider .top output{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.checks label{display:inline-flex;align-items:center;gap:6px;margin:4px 12px 4px 0;font-size:14px}
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+button{font:inherit;font-size:13px;font-weight:600;padding:6px 10px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--text);cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.ghost{background:none}
+.skip{display:none;font-size:13px;font-weight:600;margin-bottom:10px}
+@media(max-width:900px){.skip{display:inline-block}}
+.hint{font-size:12px;color:var(--muted);margin:6px 0 0}
+.err{color:var(--warn);font-size:13px;margin-top:8px;min-height:1em}
+.main{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0}
+#out{min-width:0}
+.panel{min-width:0}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.kpi span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.kpi b{display:block;font-size:24px;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.kpi small{color:var(--muted);font-size:12px}
+.pos{color:var(--good)} .neg{color:var(--warn)}
+.ph{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.ph strong{font-size:15px}
+.legend{display:flex;gap:14px;font-size:13px;color:var(--muted)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+.cbox{position:relative;height:340px}.cbox.s{height:170px}
+.toggle{font-size:13px;color:var(--muted)}.toggle input{margin-right:5px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 9px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--surface)}
+.scroll{overflow:auto;max-height:360px}
+.heat{overflow-x:auto}
+.heat table td{text-align:center;padding:5px 4px;min-width:44px;border:1px solid var(--surface);font-variant-numeric:tabular-nums}
+.heat table th{text-align:center}
+pre{margin:0;font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--code-bg);border:1px solid var(--line);border-radius:9px;padding:12px 14px;overflow-x:auto;min-height:7.5em}
+.ev-MARKET{color:var(--muted)}.ev-BAR_CLOSE{color:var(--accent)}.ev-SIGNAL{color:var(--warn)}.ev-ORDER{color:#a259d9}.ev-FILL{color:var(--good);font-weight:600}
+.insp{display:grid;gap:10px}
+.insp .bar{display:flex;gap:8px;align-items:center}
+.insp input[type=range]{flex:1}
+.state{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
+.state b{color:var(--text);font-variant-numeric:tabular-nums}
+.summary{font-size:14px;color:var(--muted);margin:0}
+.loading{padding:60px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="topbar"><div class="in">
+  <b>Backtest Dashboard</b>
+  <nav><a href="../">Report</a><a href="https://github.com/jainamh029/event-driven-backtester">GitHub</a></nav>
+</div></div>
+
+<div class="layout">
+  <aside class="panel controls" id="controls" aria-label="Backtest controls">
+    <a class="skip" href="#kpis">Skip to results ↓</a>
+    <h3>Presets</h3>
+    <div class="presets" id="presets"></div>
+
+    <h3>Strategy</h3>
+    <select id="strategy" aria-label="Strategy"></select>
+    <div id="params"></div>
+    <div class="err" id="err" role="alert"></div>
+
+    <h3>Universe</h3>
+    <div id="universe"></div>
+    <label class="f" for="bench">Benchmark (buy &amp; hold)</label>
+    <select id="bench"></select>
+
+    <h3>Window</h3>
+    <div class="two">
+      <div><label class="f" for="start">Start</label><input type="date" id="start"></div>
+      <div><label class="f" for="end">End</label><input type="date" id="end"></div>
+    </div>
+    <p class="hint">Indicators warm up inside the window, so long look-backs delay the first trade.</p>
+
+    <h3>Capital &amp; costs</h3>
+    <label class="f" for="cash">Starting cash ($)</label><input type="number" id="cash" min="1000" step="1000">
+    <div class="two">
+      <div><label class="f" for="slip">Slippage (bps/fill)</label><input type="number" id="slip" min="0" max="200" step="1"></div>
+      <div><label class="f" for="cps">Commission ($/share)</label><input type="number" id="cps" min="0" max="1" step="0.001"></div>
+    </div>
+    <label class="f" for="minc">Minimum commission ($/order)</label><input type="number" id="minc" min="0" max="50" step="0.5">
+    <p style="margin:14px 0 0"><button class="ghost" id="reset">Reset to defaults</button> <button class="ghost" id="copy">Copy link</button></p>
+  </aside>
+
+  <section class="main" id="main">
+    <div class="loading" id="loading">Loading price data…</div>
+    <div id="out" hidden>
+      <p class="summary" id="summary"></p>
+      <div class="kpis" id="kpis" style="margin-top:12px"></div>
+
+      <div class="panel" style="margin-top:16px">
+        <div class="ph"><strong>Growth of starting cash</strong>
+          <div class="legend"><span><i class="dot" style="background:var(--c-strat)"></i><span id="lg-strat">Strategy</span></span><span id="lg-bench-wrap"><i class="dot" style="background:var(--c-bench)"></i><span id="lg-bench"></span></span>
+          <label class="toggle"><input type="checkbox" id="log" checked>log scale</label></div></div>
+        <div class="cbox"><canvas id="eq"></canvas></div>
+      </div>
+      <div class="panel" style="margin-top:16px"><div class="ph"><strong>Drawdown</strong></div><div class="cbox s"><canvas id="dd"></canvas></div></div>
+      <div class="panel" style="margin-top:16px"><div class="ph"><strong>Exposure</strong><span class="hint" style="margin:0">share of equity held in positions</span></div><div class="cbox s"><canvas id="ex"></canvas></div></div>
+
+      <div class="panel" style="margin-top:16px">
+        <div class="ph"><strong>Event inspector</strong><span class="hint" style="margin:0">step through the exact event stream, bar by bar</span></div>
+        <div class="insp">
+          <div class="bar">
+            <button id="prevSig" title="Previous bar with a signal">◀ signal</button>
+            <input type="range" id="bar" min="0" value="0" aria-label="Bar">
+            <button id="nextSig" title="Next bar with a signal">signal ▶</button>
+          </div>
+          <div class="state" id="state"></div>
+          <pre id="events"></pre>
+          <p class="hint" style="margin:0">Orders raised at one bar's close are filled at the <em>next</em> bar's open: look for a <code>FILL</code> on the bar after each <code>ORDER</code>.</p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-top:16px"><div class="ph"><strong>Monthly returns</strong></div><div class="heat" id="monthly"></div></div>
+
+      <div class="panel" style="margin-top:16px">
+        <div class="ph"><strong>Closed trades</strong><span class="hint" style="margin:0" id="trade-note"></span></div>
+        <div class="scroll"><table id="trades"></table></div>
+      </div>
+      <p class="hint" style="margin:16px 0 0" id="foot"></p>
+    </div>
+  </section>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

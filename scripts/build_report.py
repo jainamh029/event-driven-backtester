@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import date
 from pathlib import Path
 
@@ -159,6 +160,10 @@ def main() -> None:
     html = (ROOT / "site" / "template.html").read_text().replace("__DATA__", json.dumps(payload, separators=(",", ":")))
     (ROOT / "docs" / "index.html").write_text(html)
     (ROOT / "docs" / ".nojekyll").write_text("")
+    # the dashboard fetches the same CSVs the Python engine used (Pages only serves docs/)
+    (ROOT / "docs" / "data").mkdir(exist_ok=True)
+    for sym in SYMBOLS:
+        shutil.copy(ROOT / "data" / f"{sym}.csv", ROOT / "docs" / "data" / f"{sym}.csv")
     print(f"wrote docs/index.html ({len(html) / 1024:.0f} KB)")
     print("best IS combo:", sweep_out["best_is"], "| OOS median", round(sweep_out["oos_median"], 2))
     for c_ in la_out["curves"]:

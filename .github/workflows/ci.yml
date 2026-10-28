@@ -20,3 +20,8 @@ jobs:
       - run: pytest -q
       - name: Report builds from committed data
         run: python scripts/build_report.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: JS engine matches Python engine
+        run: node scripts/check_js_parity.mjs
